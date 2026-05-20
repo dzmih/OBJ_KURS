@@ -1,0 +1,33 @@
+2026-05-20 18:48:46,455 - Error: list index out of range
+2026-05-20 18:48:50,090 - Player A MISSED at (5,2)
+2026-05-20 18:48:50,415 - Player B MISSED at (6,4)
+2026-05-20 18:48:50,663 - Player A MISSED at (5,4)
+2026-05-20 18:48:50,959 - Player B MISSED at (8,6)
+2026-05-20 18:48:51,159 - Player A MISSED at (3,7)
+2026-05-20 18:48:51,424 - Player B MISSED at (3,8)
+2026-05-20 18:48:51,624 - Player A HIT at (4,5) -> Submarine
+2026-05-20 18:48:51,844 - Player B HIT at (6,3) -> AircraftCarrier
+2026-05-20 18:48:52,100 - Player A MISSED at (0,1)
+2026-05-20 18:48:52,314 - Player B MISSED at (4,1)
+2026-05-20 18:48:52,553 - Player A HIT at (2,1) -> Destroyer
+2026-05-20 18:48:52,785 - Player B MISSED at (5,4)
+2026-05-20 18:48:53,037 - Player A MISSED at (4,4)
+2026-05-20 18:48:53,261 - Player B MISSED at (4,5)
+2026-05-20 18:48:53,473 - Player A MISSED at (7,5)
+2026-05-20 18:48:53,717 - Player B MISSED at (4,6)
+2026-05-20 18:48:53,983 - Player A MISSED at (5,7)
+2026-05-20 18:48:54,281 - Player B MISSED at (9,8)
+2026-05-20 18:48:54,576 - Player A HIT at (3,8) -> Destroyer
+2026-05-20 18:48:55,050 - Player B MISSED at (6,8)
+2026-05-20 18:48:55,262 - Player A MISSED at (9,5)
+2026-05-20 18:48:55,731 - Player B MISSED at (4,4)
+2026-05-20 18:48:55,953 - Player A MISSED at (7,2)
+2026-05-20 18:48:56,187 - Player B MISSED at (7,2)
+2026-05-20 18:48:56,403 - Player A MISSED at (3,1)
+2026-05-20 18:48:56,651 - Player B MISSED at (6,1)
+2026-05-20 18:48:56,911 - Player A MISSED at (4,2)
+2026-05-20 18:48:57,644 - Player B HIT at (6,7) -> Submarine
+2026-05-20 18:48:58,339 - Player A MISSED at (7,8)
+2026-05-20 18:48:59,209 - Player B MISSED at (7,4)
+2026-05-20 18:48:59,668 - Player A MISSED at (7,4)
+2026-05-20 18:49:00,156 - Player B HIT at (5,3) -> AircraftCarrier
