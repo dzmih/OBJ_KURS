@@ -1,16 +1,18 @@
-﻿import tkinter as tk
+import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import scrolledtext
 import tkinter.ttk as ttk
 
 from game_master import MasterClass
 from players import HumanPlayer
+from sound_manager import SoundManager
 
 
 class GUIObserver:
-    def __init__(self, text_widget, status_var=None):
+    def __init__(self, text_widget, status_var=None, sound=None):
         self.text_widget = text_widget
         self.status_var = status_var
+        self.sound = sound
 
     def update(self, event_type, **kwargs):
         if event_type == 'shot':
@@ -22,6 +24,14 @@ class GUIObserver:
             message = f"Player {player} {'HIT' if hit else 'MISSED'} at ({x},{y})"
             if ship_type:
                 message += f" -> {ship_type}"
+            if self.sound:
+                if ship_type and 'SUNK' in str(ship_type):
+                    self.sound.play('sunk')
+                elif hit:
+                    self.sound.play('hit')
+                else:
+                    self.sound.play('miss')
+                self.sound.play('shot')
         elif event_type == 'win':
             message = f"Player {kwargs.get('winner')} WON the game!"
         elif event_type == 'error':
@@ -42,22 +52,26 @@ class GUIObserver:
 
 
 class PlacementController:
-    def __init__(self, game, fleet_specs):
+    def __init__(self, game, fleet_specs, player_order=None):
         self.game = game
         self.fleet_specs = fleet_specs
-        self.player_order = ['A', 'B']
+        self.player_order = player_order if player_order is not None else ['A', 'B']
         self.player_index = 0
-        self.ship_index_by_player = {'A': 0, 'B': 0}
+        self.ship_index_by_player = {p: 0 for p in self.player_order}
         self.horizontal = True
         self._clear_boards()
 
     def _clear_boards(self):
         size = self.game.map.size
-        self.game.map.shipsA.clear()
-        self.game.map.shipsB.clear()
-        self.game.map.mapA = [['.' for _ in range(size)] for _ in range(size)]
-        self.game.map.mapB = [['.' for _ in range(size)] for _ in range(size)]
         self.game.winner = None
+        # Only clear boards for players who need manual placement (are in player_order)
+        for player in self.player_order:
+            if player == 'A':
+                self.game.map.shipsA.clear()
+                self.game.map.mapA = [['.' for _ in range(size)] for _ in range(size)]
+            else:
+                self.game.map.shipsB.clear()
+                self.game.map.mapB = [['.' for _ in range(size)] for _ in range(size)]
 
     @property
     def current_player(self):
@@ -79,7 +93,7 @@ class PlacementController:
 
     def reset(self):
         self.player_index = 0
-        self.ship_index_by_player = {'A': 0, 'B': 0}
+        self.ship_index_by_player = {p: 0 for p in self.player_order}
         self.horizontal = True
         self._clear_boards()
 
@@ -100,7 +114,7 @@ class PlacementController:
         return True, 'placed'
 
     def placement_complete(self):
-        return self.ship_index_by_player['A'] >= len(self.fleet_specs) and self.ship_index_by_player['B'] >= len(self.fleet_specs)
+        return all(self.ship_index_by_player.get(p, 0) >= len(self.fleet_specs) for p in self.player_order)
 
 
 class SeaBattleGUI(tk.Tk):
@@ -108,7 +122,7 @@ class SeaBattleGUI(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title('Sea Battle — GUI')
+        self.title('Sea Battle — GUI v2')
         self.configure(bg='#f0f4f8')
 
         self.app_font = tkfont.Font(family='Segoe UI', size=10)
@@ -120,15 +134,19 @@ class SeaBattleGUI(tk.Tk):
         self.attacker = 'A'
         self.auto_run = False
         self.after_id = None
+        self.timer_id = None
+        self.timer_seconds = 15
+        self.timer_var = tk.StringVar(value='')
 
         self.status_var = tk.StringVar(value='Ready')
+        self.sound = SoundManager()
 
         self._build_toolbar()
         self._build_views()
         self._build_log()
         self._build_status_bar()
 
-        self.gui_observer = GUIObserver(self.log, self.status_var)
+        self.gui_observer = GUIObserver(self.log, self.status_var, self.sound)
         self.start_new_game()
 
     def _build_toolbar(self):
@@ -145,6 +163,7 @@ class SeaBattleGUI(tk.Tk):
 
         ttk.Button(toolbar, text='New Game', command=self.start_new_game).pack(side=tk.LEFT, padx=6)
         ttk.Button(toolbar, text='Rotate', command=self.rotate_orientation).pack(side=tk.LEFT)
+        ttk.Button(toolbar, text='Auto Place', command=self.auto_place_current).pack(side=tk.LEFT, padx=6)
         ttk.Button(toolbar, text='Step', command=self.step).pack(side=tk.LEFT, padx=6)
 
         self.auto_btn = ttk.Button(toolbar, text='Auto Run', command=self.toggle_auto)
@@ -152,6 +171,10 @@ class SeaBattleGUI(tk.Tk):
 
         ttk.Button(toolbar, text='Clear Log', command=self.clear_log).pack(side=tk.RIGHT)
         ttk.Button(toolbar, text='Quit', command=self.quit).pack(side=tk.RIGHT, padx=6)
+        self.music_btn = ttk.Button(toolbar, text='🎵 ON', command=self.toggle_music)
+        self.music_btn.pack(side=tk.RIGHT, padx=2)
+        self.sfx_btn = ttk.Button(toolbar, text='🔊 ON', command=self.toggle_sfx)
+        self.sfx_btn.pack(side=tk.RIGHT, padx=2)
 
     def _build_views(self):
         self.root_frame = tk.Frame(self, bg='#f0f4f8')
@@ -165,6 +188,11 @@ class SeaBattleGUI(tk.Tk):
         self.placement_canvas = tk.Canvas(self.placement_frame, width=self.CELL_SIZE, height=self.CELL_SIZE, bg='white', bd=2, relief='sunken')
         self.placement_canvas.pack(padx=8, pady=8)
         self.placement_canvas.bind('<Button-1>', self.on_placement_click)
+
+        # кнопки підтвердження авторозстановки (приховані поки не натиснуто Auto Place)
+        self.auto_confirm_frame = tk.Frame(self.placement_frame, bg='#f0f4f8')
+        ttk.Button(self.auto_confirm_frame, text='✓ Прийняти', command=self.confirm_auto_place).pack(side=tk.LEFT, padx=8)
+        ttk.Button(self.auto_confirm_frame, text='🔀 Ще раз', command=self.reroll_auto_place).pack(side=tk.LEFT, padx=8)
 
         self.battle_frame = tk.Frame(self.root_frame, bg='#f0f4f8')
         battle_top = tk.Frame(self.battle_frame, bg='#f0f4f8')
@@ -190,8 +218,15 @@ class SeaBattleGUI(tk.Tk):
         self.log.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=8)
 
     def _build_status_bar(self):
-        status = tk.Label(self, textvariable=self.status_var, anchor='w', bg='#e9eef3')
-        status.pack(fill=tk.X)
+        bar = tk.Frame(self, bg='#e9eef3')
+        bar.pack(fill=tk.X)
+        status = tk.Label(bar, textvariable=self.status_var, anchor='w', bg='#e9eef3')
+        status.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.timer_label = tk.Label(bar, textvariable=self.timer_var,
+                                    bg='#e9eef3', fg='#c0392b',
+                                    font=tkfont.Font(family='Segoe UI', size=11, weight='bold'),
+                                    width=10, anchor='e')
+        self.timer_label.pack(side=tk.RIGHT, padx=8)
 
     def fleet_specs(self):
         return [
@@ -207,20 +242,50 @@ class SeaBattleGUI(tk.Tk):
             {'ship_type': 'patrol', 'title': 'Patrol Boat', 'length': 1},
         ]
 
+    def toggle_music(self):
+        on = self.sound.toggle_music()
+        self.music_btn.config(text='🎵 ON' if on else '🎵 OFF')
+
+    def toggle_sfx(self):
+        on = self.sound.toggle_sfx()
+        self.sfx_btn.config(text='🔊 ON' if on else '🔊 OFF')
+
     def clear_log(self):
         self.log.delete('1.0', tk.END)
 
     def start_new_game(self):
         self.stop_auto()
+        self.stop_turn_timer()
         self.master_game = MasterClass()
         self.master_game.attach(self.gui_observer)
-        self.master_game.set_players(self.varA.get(), self.varB.get())
-        self.placement = PlacementController(self.master_game, self.fleet_specs())
-        self.phase = 'placement'
+        self.master_game.set_players(
+            self.varA.get(),
+            self.varB.get()
+        )
         self.attacker = 'A'
-        self.show_placement_view()
+        human_players = [p for p in ('A', 'B') if isinstance(self.master_game.players[p], HumanPlayer)]
+        print(f"DEBUG: varA={self.varA.get()}, varB={self.varB.get()}, human_players={human_players}")
+
+        if human_players:
+            self.placement = PlacementController(
+                self.master_game,
+                self.fleet_specs(),
+                player_order=human_players
+            )
+            for p in ('A', 'B'):
+                if p not in human_players:
+                    self.master_game.auto_place_ships(p)
+            self.phase = 'placement'
+            self.show_placement_view()
+        else:
+            self.placement = None
+            self.master_game.auto_place_ships('A')
+            self.master_game.auto_place_ships('B')
+            self.phase = 'battle'
+            self.show_battle_view()
+            self.start_turn_timer()
         self.refresh_views()
-        self.log.insert(tk.END, 'New game started. Place ships for Player A first.\n')
+        self.log.insert(tk.END, 'New game started.\n')
         self.log.see(tk.END)
 
     def show_placement_view(self):
@@ -230,6 +295,58 @@ class SeaBattleGUI(tk.Tk):
     def show_battle_view(self):
         self.placement_frame.pack_forget()
         self.battle_frame.pack(side=tk.TOP, pady=(4, 0))
+
+    def auto_place_current(self):
+        if self.phase != 'placement' or not self.placement:
+            return
+        self._do_auto_place_preview()
+
+    def _do_auto_place_preview(self):
+        player = self.placement.current_player
+        size = self.master_game.map.size
+
+        if player == 'A':
+            self.master_game.map.shipsA.clear()
+            self.master_game.map.mapA = [['.' for _ in range(size)] for _ in range(size)]
+        else:
+            self.master_game.map.shipsB.clear()
+            self.master_game.map.mapB = [['.' for _ in range(size)] for _ in range(size)]
+
+        self.placement.ship_index_by_player[player] = 0
+        self.master_game.auto_place_ships(player)
+
+        self.placement_canvas.unbind('<Button-1>')
+        self.auto_confirm_frame.pack(pady=(0, 8))
+        self.placement_info.config(text=f'Player {player}: перегляньте розстановку — прийняти чи перегенерувати?')
+        board = self.master_game.map.mapA if player == 'A' else self.master_game.map.mapB
+        self.placement_canvas.delete('all')
+        self._draw_board(self.placement_canvas, board, show_ships=True)
+
+    def confirm_auto_place(self):
+        if not self.placement:
+            return
+        player = self.placement.current_player
+        self.placement.ship_index_by_player[player] = len(self.placement.fleet_specs)
+        self.auto_confirm_frame.pack_forget()
+        self.placement_canvas.bind('<Button-1>', self.on_placement_click)
+        self.log.insert(tk.END, f'Player {player}: авторозстановку прийнято.\n')
+        self.log.see(tk.END)
+
+        self.placement.player_index += 1
+        if self.placement.player_index >= len(self.placement.player_order):
+            self.phase = 'battle'
+            self.show_battle_view()
+            self.log.insert(tk.END, 'Placement complete. Battle starts now.\n')
+            self.log.see(tk.END)
+            self.refresh_views()
+            self.start_turn_timer()
+        else:
+            self.refresh_views()
+
+    def reroll_auto_place(self):
+        if not self.placement:
+            return
+        self._do_auto_place_preview()
 
     def rotate_orientation(self):
         if self.phase != 'placement' or not self.placement:
@@ -317,6 +434,7 @@ class SeaBattleGUI(tk.Tk):
             self.log.insert(tk.END, 'Placement complete. Battle starts now.\n')
             self.log.see(tk.END)
             self.refresh_views()
+            self.start_turn_timer()
             return
 
         self.refresh_views()
@@ -336,6 +454,9 @@ class SeaBattleGUI(tk.Tk):
         y = event.y // cell
         defender = 'B' if self.attacker == 'A' else 'A'
 
+        if not (0 <= x < size and 0 <= y < size):
+            return
+
         try:
             hit, ship_type = self.master_game.map.process_shot(defender, x, y)
         except ValueError as e:
@@ -351,12 +472,16 @@ class SeaBattleGUI(tk.Tk):
 
         self.refresh_views()
         if self.master_game.winner:
+            self.stop_turn_timer()
             self.log.insert(tk.END, f'Winner: {self.master_game.winner}\n')
             self.log.see(tk.END)
+            human_marks = [p for p, obj in self.master_game.players.items() if isinstance(obj, HumanPlayer)]
+            self.sound.play('victory' if self.master_game.winner in human_marks else 'defeat')
             return
 
         self.attacker = 'B' if self.attacker == 'A' else 'A'
         self.status_var.set(f'Phase: battle | Attacker: {self.attacker}')
+        self.start_turn_timer()
 
     def step(self):
         if self.phase != 'battle' or not self.master_game or self.master_game.winner:
@@ -372,12 +497,16 @@ class SeaBattleGUI(tk.Tk):
         self.refresh_views()
 
         if self.master_game.winner:
+            self.stop_turn_timer()
             self.log.insert(tk.END, f'Winner: {self.master_game.winner}\n')
             self.log.see(tk.END)
+            human_marks = [p for p, obj in self.master_game.players.items() if isinstance(obj, HumanPlayer)]
+            self.sound.play('victory' if self.master_game.winner in human_marks else 'defeat')
             return
 
         self.attacker = 'B' if self.attacker == 'A' else 'A'
         self.status_var.set(f'Phase: battle | Attacker: {self.attacker}')
+        self.start_turn_timer()
 
     def auto_step(self):
         if not self.auto_run:
@@ -411,6 +540,62 @@ class SeaBattleGUI(tk.Tk):
             self.auto_btn.config(text='Auto Run')
         except Exception:
             pass
+
+
+    def _auto_fire_and_continue(self):
+        if self.phase != 'battle' or not self.master_game or self.master_game.winner:
+            return
+        self.master_game.process_turn(self.attacker)
+        self.refresh_views()
+        if self.master_game.winner:
+            self.stop_turn_timer()
+            self.log.insert(tk.END, f'Winner: {self.master_game.winner}\n')
+            self.log.see(tk.END)
+            return
+        self.attacker = 'B' if self.attacker == 'A' else 'A'
+        self.status_var.set(f'Phase: battle | Attacker: {self.attacker}')
+        self.timer_var.set('')
+        self.after(100, self.start_turn_timer)
+
+    def start_turn_timer(self):
+        self.stop_turn_timer()
+        self._remaining = self.timer_seconds
+        self._tick_timer()
+
+    def _tick_timer(self):
+        if self.phase != 'battle' or not self.master_game or self.master_game.winner:
+            self.timer_var.set('')
+            return
+        player_obj = self.master_game.players.get(self.attacker)
+        if not isinstance(player_obj, HumanPlayer):
+            self.timer_var.set('')
+            return
+
+        self.timer_var.set(f'⏱ {self._remaining}s')
+        self.timer_label.config(fg='#c0392b' if self._remaining <= 10 else '#2c3e50')
+
+        if self._remaining <= 0:
+            self.timer_var.set('⏱ Час вийшов!')
+            self.log.insert(tk.END, f'Player {self.attacker}: час вийшов — хід пропущено!\n')
+            self.log.see(tk.END)
+            self.attacker = 'B' if self.attacker == 'A' else 'A'
+            self.status_var.set(f'Phase: battle | Attacker: {self.attacker}')
+            self.refresh_views()
+            next_player = self.master_game.players.get(self.attacker)
+            if not isinstance(next_player, HumanPlayer):
+                self.after(100, self._auto_fire_and_continue)
+            else:
+                self.after(300, self.start_turn_timer)
+            return
+
+        self._remaining -= 1
+        self.timer_id = self.after(1000, self._tick_timer)
+
+    def stop_turn_timer(self):
+        if self.timer_id:
+            self.after_cancel(self.timer_id)
+            self.timer_id = None
+        self.timer_var.set('')
 
 
 if __name__ == '__main__':

@@ -1,7 +1,6 @@
 class Map:
     def __init__(self, size):
         self.size = size
-        # Карти: '.' - вода, 'S' - корабель (приховано), 'X' - влучання, 'o' - промах
         self.mapA = [['.' for _ in range(size)] for _ in range(size)]
         self.mapB = [['.' for _ in range(size)] for _ in range(size)]
         self.shipsA = []
@@ -38,27 +37,24 @@ class Map:
             for i in range(ship.length):
                 coordinates.append((x, y + i))
 
-        # Забороняємо дотик кораблів навіть по діагоналі
         if not self._can_place_ship(board, coordinates):
             return False
 
-        # Розміщення
         ship.place(x, y, horizontal)
         ships_list.append(ship)
 
-        char_symbol = 'S' # Внутрішнє позначення корабля
+        char_symbol = 'S'
         for ship_x, ship_y in coordinates:
             board[ship_y][ship_x] = char_symbol
         return True
 
     def get_masked_map(self, target_player_mark):
-        """Повертає карту противника, приховуючи живі кораблі"""
         real_map = self.mapA if target_player_mark == 'A' else self.mapB
         masked_map = []
         for row in real_map:
             new_row = []
             for cell in row:
-                if cell == 'S': # Ховаємо корабель
+                if cell == 'S':
                     new_row.append('.')
                 else:
                     new_row.append(cell) # 'X', 'o', '.' залишаються
@@ -77,9 +73,6 @@ class Map:
         for row in self.mapB: print(" ".join(row))
 
     def process_shot(self, defender_mark, x, y):
-        """Process a shot at (x,y) for defender_mark and return (hit, ship_type_or_None).
-        Raises ValueError if the cell was already targeted.
-        """
         target_board = self.mapA if defender_mark == 'A' else self.mapB
         target_ships = self.shipsA if defender_mark == 'A' else self.shipsB
 

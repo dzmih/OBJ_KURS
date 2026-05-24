@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 
-# Abstract Product
 class Ship(ABC):
     def __init__(self, length, symbol, name):
         self.length = length
@@ -25,7 +24,6 @@ class Ship(ABC):
             self.is_sunk = True
         return self.is_sunk
 
-# Concrete Products
 class Destroyer(Ship):
     def __init__(self, symbol):
         super().__init__(2, symbol, "Destroyer")
@@ -42,7 +40,6 @@ class PatrolBoat(Ship):
     def __init__(self, symbol):
         super().__init__(1, symbol, "PatrolBoat")
 
-# --- PATTERN: FACTORY METHOD ---
 class ShipFactory:
     @staticmethod
     def create_ship(ship_type, symbol):
